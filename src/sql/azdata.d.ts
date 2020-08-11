@@ -41,6 +41,10 @@ declare module 'azdata' {
 
 		export function registerCapabilitiesServiceProvider(provider: CapabilitiesProvider): vscode.Disposable;
 
+		export function registerSerializationProvider(provider: SerializationProvider): vscode.Disposable;
+
+		export function registerSqlAssessmentServicesProvider(provider: SqlAssessmentServicesProvider): vscode.Disposable;
+
 		/**
 		 * Get the provider corresponding to the given provider ID and type
 		 * @param providerId The ID that the provider was registered with
@@ -189,6 +193,22 @@ declare module 'azdata' {
 		 * @param connectionProfile connection profile
 		 */
 		export function connect(connectionProfile: IConnectionProfile, saveConnection?: boolean, showDashboard?: boolean): Thenable<ConnectionResult>;
+
+		export type ConnectionEventType =
+			| 'onConnect'
+			| 'onDisconnect'
+			| 'onConnectionChanged';
+
+		export interface ConnectionEventListener {
+			onConnectionEvent(type: ConnectionEventType, ownerUri: string, args: IConnectionProfile): void;
+		}
+
+		/**
+		 * Register a connection event listener
+		 */
+		export function registerConnectionEventListener(listener: connection.ConnectionEventListener): void;
+
+		export function getConnection(uri: string): Thenable<ConnectionProfile>;
 	}
 
 	/**
@@ -333,7 +353,9 @@ declare module 'azdata' {
 		saveProfile: boolean;
 		id: string;
 		azureTenantId?: string;
-
+		azureAccount?: string;
+		azureResourceId?: string;
+		azurePortalEndpoint?: string;
 	}
 
 	/**
@@ -561,6 +583,17 @@ declare module 'azdata' {
 		isIdentity: boolean;
 
 		isRequired: boolean;
+
+		defaultValueOsOverrides?: DefaultValueOsOverride[];
+	}
+
+	/**
+	 * Add optional per-OS default value.
+	 */
+	export interface DefaultValueOsOverride {
+		os: string;
+
+		defaultValueOverride: string;
 	}
 
 	export interface ConnectionProviderOptions {
@@ -2586,6 +2619,42 @@ declare module 'azdata' {
 		loadingComponent(): LoadingComponentBuilder;
 		fileBrowserTree(): ComponentBuilder<FileBrowserTreeComponent>;
 		hyperlink(): ComponentBuilder<HyperlinkComponent>;
+		radioCardGroup(): ComponentBuilder<RadioCardGroupComponent>;
+		tabbedPanel(): TabbedPanelComponentBuilder;
+		separator(): ComponentBuilder<SeparatorComponent>;
+		propertiesContainer(): ComponentBuilder<PropertiesContainerComponent>;
+	}
+
+	export interface RadioCard {
+		id: string;
+		label: string;
+		descriptions?: RadioCardDescription[];
+		icon?: string | vscode.Uri | { light: string | vscode.Uri; dark: string | vscode.Uri };
+	}
+
+	export interface RadioCardDescription {
+		ariaLabel: string;
+		labelHeader: string;
+		contents: RadioCardLabelValuePair[];
+		valueHeader?: string;
+	}
+
+	export interface RadioCardLabelValuePair {
+		label: string;
+		value?: string;
+	}
+
+	export interface RadioCardGroupComponentProperties extends ComponentProperties, TitledComponentProperties {
+		cards: RadioCard[];
+		cardWidth: string;
+		cardHeight: string;
+		iconWidth?: string;
+		iconHeight?: string;
+		selectedCardId?: string;
+	}
+
+	export interface RadioCardGroupComponent extends Component, RadioCardGroupComponentProperties {
+		onSelectionChanged: vscode.Event<any>;
 	}
 
 	export interface TreeComponentDataProvider<T> extends vscode.TreeDataProvider<T> {
@@ -3148,6 +3217,10 @@ declare module 'azdata' {
 		 */
 		ariaSelected?: boolean;
 		/**
+		 * Corresponds to the aria-hidden accessibility attribute for this component
+		 */
+		ariaHidden?: boolean;
+		/**
 		 * Matches the CSS style key and its available values.
 		 */
 		CSSStyles?: { [key: string]: string };
@@ -3255,7 +3328,8 @@ declare module 'azdata' {
 		string = 'string',
 		category = 'category',
 		boolean = 'boolean',
-		editableCategory = 'editableCategory'
+		editableCategory = 'editableCategory',
+		component = 'component'
 	}
 
 	export interface RadioButtonProperties {
@@ -4339,6 +4413,11 @@ declare module 'azdata' {
 			 * @return The given range or a new, adjusted range.
 			 */
 			validateCellRange(range: CellRange): CellRange;
+
+			/**
+			 * Sets the trust mode for the notebook document.
+			 */
+			setTrusted(state: boolean);
 		}
 
 		/**
@@ -5264,5 +5343,66 @@ declare module 'azdata' {
 		}
 
 		//#endregion
+	}
+
+	export type SqlDbType = 'BigInt' | 'Binary' | 'Bit' | 'Char' | 'DateTime' | 'Decimal'
+		| 'Float' | 'Image' | 'Int' | 'Money' | 'NChar' | 'NText' | 'NVarChar' | 'Real'
+		| 'UniqueIdentifier' | 'SmallDateTime' | 'SmallInt' | 'SmallMoney' | 'Text' | 'Timestamp'
+		| 'TinyInt' | 'VarBinary' | 'VarChar' | 'Variant' | 'Xml' | 'Udt' | 'Structured' | 'Date'
+		| 'Time' | 'DateTime2' | 'DateTimeOffset';
+
+	export interface SimpleColumnInfo {
+		name: string;
+		/**
+		 * This is expected to match the SqlDbTypes for serialization purposes
+		 */
+		dataTypeName: SqlDbType;
+	}
+	export interface SerializeDataStartRequestParams {
+		/**
+		 * 'csv', 'json', 'excel', 'xml'
+		 */
+		saveFormat: string;
+		filePath: string;
+		isLastBatch: boolean;
+		rows: DbCellValue[][];
+		columns: SimpleColumnInfo[];
+		includeHeaders?: boolean;
+		delimiter?: string;
+		lineSeperator?: string;
+		textIdentifier?: string;
+		encoding?: string;
+		formatted?: boolean;
+	}
+
+	export interface SerializeDataContinueRequestParams {
+		filePath: string;
+		isLastBatch: boolean;
+		rows: DbCellValue[][];
+	}
+
+	export interface SerializeDataResult {
+		messages?: string;
+		succeeded: boolean;
+	}
+
+	export interface SerializationProvider extends DataProvider {
+		startSerialization(requestParams: SerializeDataStartRequestParams): Thenable<SerializeDataResult>;
+		continueSerialization(requestParams: SerializeDataContinueRequestParams): Thenable<SerializeDataResult>;
+	}
+
+	export interface HyperlinkComponent {
+		/**
+		 * An event called when the text is clicked
+		 */
+		onDidClick: vscode.Event<any>;
+	}
+
+	export interface DeclarativeTableColumn {
+		headerCssStyles?: { [key: string]: string };
+		rowCssStyles?: { [key: string]: string };
+		ariaLabel?: string;
+		showCheckAll?: boolean;
+		isChecked?: boolean;
 	}
 }
