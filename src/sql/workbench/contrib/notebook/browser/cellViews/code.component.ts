@@ -69,7 +69,6 @@ export class CodeComponent extends CellView implements OnInit, OnChanges {
 			// Refresh based on the cell magic (since this is kernel-dependent) and then update using notebook language
 			this.checkForLanguageMagics();
 			this.updateLanguageMode();
-			this.removeOldDecorations();
 		}));
 		this._register(value.onValidConnectionSelected(() => {
 			this.updateConnectionState(this.isActive());
@@ -322,11 +321,6 @@ export class CodeComponent extends CellView implements OnInit, OnChanges {
 			let modeValue = this._modeService.create(this.cellModel.language);
 			this._modelService.setMode(this._editorModel, modeValue);
 		}
-	}
-
-	private removeOldDecorations(): void {
-		let oldDecorations = this._editorModel.getAllDecorations().map(decoration => decoration.id);
-		this._editorModel.deltaDecorations(oldDecorations, []);
 	}
 
 	private updateTheme(theme: IColorTheme): void {
